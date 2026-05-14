@@ -1,0 +1,70 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  fetchDashboardToday,
+  fetchDashboardGrid,
+  postManualLog,
+} from "@/lib/api";
+
+const originalFetch = globalThis.fetch;
+
+describe("api client", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://test";
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("fetchDashboardToday calls the right URL", async () => {
+    const mockFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ metric_date: "2026-05-13" }), { status: 200 }),
+    );
+    globalThis.fetch = mockFetch as typeof fetch;
+    await fetchDashboardToday("hugo", "2026-05-13");
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/dashboard/today?user_id=hugo&as_of=2026-05-13"),
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("fetchDashboardGrid passes days param", async () => {
+    const mockFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ n_days: 14, tiles: [] }), { status: 200 }),
+    );
+    globalThis.fetch = mockFetch as typeof fetch;
+    await fetchDashboardGrid("hugo", 30);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("days=30"),
+      expect.anything(),
+    );
+  });
+
+  it("postManualLog sends JSON body", async () => {
+    const mockFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          logged_date: "2026-05-14",
+          fields_updated: ["weight_lbs"],
+          completeness: { subjective: false, weight: true, nutrition: false },
+          next_required_inputs: [],
+        }),
+        { status: 200 },
+      ),
+    );
+    globalThis.fetch = mockFetch as typeof fetch;
+    await postManualLog({ user_id: "hugo", date: "2026-05-14", weight_lbs: 218.4 });
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/manual-log"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+      }),
+    );
+  });
+
+  it("fetchDashboardToday throws on non-200", async () => {
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 500 })) as typeof fetch;
+    await expect(fetchDashboardToday("hugo")).rejects.toThrow(/failed: 500/);
+  });
+});
