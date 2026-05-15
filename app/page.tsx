@@ -6,10 +6,11 @@ import { fetchDashboardToday, fetchDashboardGrid } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-interface PageProps { searchParams: { days?: string } }
+interface PageProps { searchParams: Promise<{ days?: string }> }
 
 export default async function GridPage({ searchParams }: PageProps) {
-  const days = Number(searchParams.days ?? 14);
+  const { days: daysParam } = await searchParams;
+  const days = Number(daysParam ?? 14);
   const [today, grid] = await Promise.all([
     fetchDashboardToday(),
     fetchDashboardGrid("hugo", days),
