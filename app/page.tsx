@@ -1,17 +1,34 @@
 import { TodayStrip } from "@/components/TodayStrip";
 import { NarrationLine } from "@/components/NarrationLine";
-import { fetchDashboardToday } from "@/lib/api";
+import { SparklineTile } from "@/components/SparklineTile";
+import { WindowSelector } from "@/components/WindowSelector";
+import { fetchDashboardToday, fetchDashboardGrid } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export default async function GridPage() {
-  const today = await fetchDashboardToday();
+interface PageProps { searchParams: { days?: string } }
+
+export default async function GridPage({ searchParams }: PageProps) {
+  const days = Number(searchParams.days ?? 14);
+  const [today, grid] = await Promise.all([
+    fetchDashboardToday(),
+    fetchDashboardGrid("hugo", days),
+  ]);
+
   return (
     <div className="space-y-6 max-w-5xl">
       <TodayStrip data={today.today_strip} metricDate={today.metric_date} />
       <NarrationLine narration={today.narration} />
-      <div className="border border-border rounded p-6 bg-surface text-text-muted">
-        Grid tiles — wired in Task 6
+
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-text-muted font-mono">Window:</div>
+        <WindowSelector defaultDays={days} />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {grid.tiles.map((tile) => (
+          <SparklineTile key={tile.metric} tile={tile} />
+        ))}
       </div>
     </div>
   );
