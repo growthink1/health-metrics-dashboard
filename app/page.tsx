@@ -1,5 +1,6 @@
 import { TodayStrip } from "@/components/TodayStrip";
 import { NarrationLine } from "@/components/NarrationLine";
+import { LogPanel } from "@/components/LogPanel";
 import { SparklineTile } from "@/components/SparklineTile";
 import { WindowSelector } from "@/components/WindowSelector";
 import { fetchDashboardToday, fetchDashboardGrid } from "@/lib/api";
@@ -20,6 +21,7 @@ export default async function GridPage({ searchParams }: PageProps) {
     <div className="space-y-6 max-w-5xl">
       <TodayStrip data={today.today_strip} metricDate={today.metric_date} />
       <NarrationLine narration={today.narration} />
+      <LogPanel logDate={today.metric_date} logStatus={today.today_strip.log_status} />
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-text-muted font-mono">Window:</div>
