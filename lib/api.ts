@@ -8,9 +8,13 @@ import type {
 } from "./types";
 
 const isServer = typeof window === "undefined";
+// Server-side (SSR + route handlers): call backend directly via Railway internal network.
+// Browser-side: same-origin → goes through the catchall proxy at app/api/[...path]/route.ts
+// which forwards to the backend internal URL server-side. Avoids needing a public backend
+// domain or cross-origin CORS at all.
 const API_BASE = isServer
-  ? (process.env.API_BASE_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000")
-  : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000");
+  ? (process.env.API_BASE_URL_INTERNAL ?? "http://localhost:8000")
+  : "";
 
 async function _get<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {

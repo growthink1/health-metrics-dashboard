@@ -68,8 +68,12 @@ describe("api client", () => {
     await expect(fetchDashboardToday("hugo")).rejects.toThrow(/failed: 500/);
   });
 
-  it("uses NEXT_PUBLIC_API_BASE_URL when called from the browser (window defined)", async () => {
-    // Vitest's jsdom environment provides window. Verify the browser branch wins.
+  it("uses same-origin (empty base) when called from the browser (window defined)", async () => {
+    // Vitest's jsdom environment provides window. The browser branch returns
+    // an empty base so calls go same-origin and hit the dashboard's catchall
+    // proxy at app/api/[...path]/route.ts (which forwards to backend internal
+    // URL server-side). API_BASE_URL_INTERNAL should be IGNORED on the browser
+    // path even when both env vars are set.
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://browser.example";
     process.env.API_BASE_URL_INTERNAL = "https://internal.example";
 
@@ -83,9 +87,10 @@ describe("api client", () => {
     const { fetchDashboardToday } = await import("@/lib/api");
     await fetchDashboardToday("hugo");
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("https://browser.example/api/dashboard/today"),
-      expect.anything(),
-    );
+    const calledUrl = (mockFetch.mock.calls[0]?.[0] ?? "") as string;
+    // Path should be /api/... with no scheme/host prefix.
+    expect(calledUrl.startsWith("/api/dashboard/today")).toBe(true);
+    expect(calledUrl).not.toContain("https://");
+    expect(calledUrl).not.toContain("internal.example");
   });
 });
