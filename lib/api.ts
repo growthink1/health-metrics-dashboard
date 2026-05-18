@@ -7,7 +7,10 @@ import type {
   WorkoutsResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const isServer = typeof window === "undefined";
+const API_BASE = isServer
+  ? (process.env.API_BASE_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000")
+  : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000");
 
 async function _get<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {

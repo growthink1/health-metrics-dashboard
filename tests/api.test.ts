@@ -67,4 +67,25 @@ describe("api client", () => {
       new Response("nope", { status: 500 })) as typeof fetch;
     await expect(fetchDashboardToday("hugo")).rejects.toThrow(/failed: 500/);
   });
+
+  it("uses NEXT_PUBLIC_API_BASE_URL when called from the browser (window defined)", async () => {
+    // Vitest's jsdom environment provides window. Verify the browser branch wins.
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://browser.example";
+    process.env.API_BASE_URL_INTERNAL = "https://internal.example";
+
+    const mockFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ metric_date: "2026-05-13" }), { status: 200 }),
+    );
+    globalThis.fetch = mockFetch as typeof fetch;
+
+    // Re-import after env mutation, since API_BASE is module-scope
+    vi.resetModules();
+    const { fetchDashboardToday } = await import("@/lib/api");
+    await fetchDashboardToday("hugo");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("https://browser.example/api/dashboard/today"),
+      expect.anything(),
+    );
+  });
 });
