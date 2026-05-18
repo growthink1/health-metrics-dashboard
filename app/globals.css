@@ -1,7 +1,27 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+/* Console palette tokens registered with Tailwind v4 so utilities like
+   bg-surface, border-border, text-text-muted, hover:border-accent-primary
+   resolve correctly. v4 uses @theme {} instead of tailwind.config.ts. */
+@theme {
+  --color-bg: #0a0e14;
+  --color-surface: #0e1422;
+  --color-border: #1f3a5f;
+  --color-text: #d4d4d4;
+  --color-text-muted: #5a8db5;
+  --color-accent-primary: #7eb5e0;
+  --color-accent-warm: #e2a04a;
+  --color-accent-good: #5ad4a8;
+  --color-accent-bad: #e25a4a;
+  --color-accent-strain: #d44a8a;
+
+  /* font CSS variables come from next/font in app/layout.tsx:
+     Inter → --font-inter, JetBrains Mono → --font-mono */
+}
+
+/* Also expose them as plain :root vars so Recharts can read them via
+   `stroke="var(--accent-primary)"` style attribute strings in components
+   that don't use Tailwind utilities (e.g. SparklineTile, MetricChart). */
 :root {
   --bg: #0a0e14;
   --surface: #0e1422;
@@ -15,12 +35,13 @@
   --accent-strain: #d44a8a;
 }
 
-html, body {
+html,
+body {
   background-color: var(--bg);
   color: var(--text);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
 .font-mono {
-  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-family: var(--font-mono), "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 }
