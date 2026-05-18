@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>health-metrics — recovery</title>
+<meta name="viewport" content="width=1440" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#0a0e14;
+    --bg-2:#0c1119;
+    --surface:#0e1422;
+    --surface-2:#121a2b;
+    --border:#1f3a5f;
+    --border-soft:#172337;
+    --text:#e6edf6;
+    --muted:#7d8aa3;
+    --muted-2:#56627a;
+    --accent-primary:#7eb5e0;   /* HRV cool blue */
+    --accent-warm:#e2a04a;      /* RHR warm amber */
+    --accent-good:#5ad4a8;      /* sleep teal/green */
+    --accent-bad:#e25a4a;       /* recovery low / red */
+    --accent-strain:#d44a8a;    /* strain magenta */
+    --accent-weight:#b58fe0;    /* weight purple */
+  }
+  html,body{background:var(--bg);color:var(--text);}
+  body{
+    font-family:'Inter',ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-feature-settings:"ss01","cv11","tnum";
+    letter-spacing:-0.005em;
+  }
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-feature-settings:"tnum";}
+  .tracked{letter-spacing:0.18em;text-transform:uppercase;}
+  .tracked-tight{letter-spacing:0.08em;text-transform:uppercase;}
+  .tnum{font-variant-numeric:tabular-nums;}
+  .hairline{box-shadow:inset 0 0 0 1px var(--border-soft);}
+  .dotgrid{
+    background-image:radial-gradient(circle, rgba(126,181,224,0.06) 1px, transparent 1px);
+    background-size:24px 24px;
+  }
+  /* sparkline draw */
+  .spark path{stroke-dasharray:600;stroke-dashoffset:600;animation:draw 1.4s ease-out forwards;}
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  /* ring sweep */
+  @keyframes ringSweep{from{stroke-dashoffset:var(--circ);}to{stroke-dashoffset:var(--off);}}
+  .ringArc{animation:ringSweep 1.6s cubic-bezier(.2,.7,.1,1) forwards;}
+  /* caret */
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  .caret{display:inline-block;width:8px;height:1.05em;background:currentColor;vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite;}
+  /* token shimmer */
+  @keyframes tokenIn{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+  .tok{display:inline;animation:tokenIn .25s ease-out both;}
+  /* pulse dot */
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(226,90,74,.55)}70%{box-shadow:0 0 0 8px rgba(226,90,74,0)}100%{box-shadow:0 0 0 0 rgba(226,90,74,0)}}
+  .pulse{animation:pulse 1.8s infinite;}
+  /* scroll */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#1f3a5f55;border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+  /* number input chrome */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]{-moz-appearance:textfield}
+  /* selection */
+  ::selection{background:rgba(126,181,224,.25)}
+  /* subtle bg vignette */
+  .page-bg{
+    background:
+      radial-gradient(1200px 600px at 12% -10%, rgba(126,181,224,0.06), transparent 60%),
+      radial-gradient(900px 500px at 95% 0%, rgba(212,74,138,0.05), transparent 60%),
+      var(--bg);
+  }
+</style>
+</head>
+<body class="page-bg">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* -------- data -------- */
+const TODAY = "2026-05-18";
+const METRICS = {
+  recovery: { label:"RECOVERY", value:6, unit:"%", color:"var(--accent-bad)", trend:[42,38,55,48,29,18,11,6], delta:"−12 vs 7d" },
+  hrv:      { label:"HRV",      value:15, unit:"ms", color:"var(--accent-primary)", trend:[38,41,37,33,28,22,18,15], delta:"−1.8σ" },
+  rhr:      { label:"RHR",      value:81, unit:"bpm", color:"var(--accent-warm)", trend:[58,60,62,66,71,74,78,81], delta:"+1.8σ" },
+  sleep:    { label:"SLEEP",    value:7.4,unit:"h", color:"var(--accent-good)", trend:[8.1,7.6,7.9,6.8,7.2,8.0,7.1,7.4], delta:"−0.3 vs avg" },
+  strain:   { label:"STRAIN",   value:5.8,unit:"",   color:"var(--accent-strain)", trend:[14,16,12,18,11,9,7,5.8], delta:"target ≤8" },
+  weight:   { label:"WEIGHT",   value:218.4, unit:"lb", color:"var(--accent-weight)", trend:[221,220.6,220.1,219.7,219.3,218.9,218.6,218.4], delta:"−2.6 / 14d" },
+};
+
+/* -------- helpers -------- */
+function sparkPath(values, w=180, h=40, pad=2){
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max-min)||1;
+  const stepX = (w-pad*2)/(values.length-1);
+  return values.map((v,i)=>{
+    const x = pad + i*stepX;
+    const y = pad + (h-pad*2) * (1 - (v-min)/range);
+    return (i?"L":"M") + x.toFixed(1) + " " + y.toFixed(1);
+  }).join(" ");
+}
+function sparkArea(values, w=180, h=40, pad=2){
+  const line = sparkPath(values,w,h,pad);
+  return line + ` L ${w-pad} ${h-pad} L ${pad} ${h-pad} Z`;
+}
+
+/* -------- Recovery ring -------- */
+function RecoveryRing({score=6, size=148}){
+  const stroke = 12;
+  const r = (size-stroke)/2;
+  const c = 2*Math.PI*r;
+  const off = c - (score/100)*c;
+  return (
+    <div className="relative" style={{width:size,height:size}}>
+      <svg width={size} height={size} className="-rotate-90">
+        <defs>
+          <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ff7a5c"/>
+            <stop offset="100%" stopColor="#e25a4a"/>
+          </linearGradient>
+        </defs>
+        <circle cx={size/2} cy={size/2} r={r} stroke="#162033" strokeWidth={stroke} fill="none"/>
+        <circle
+          cx={size/2} cy={size/2} r={r}
+          stroke="url(#ringGrad)" strokeWidth={stroke} fill="none" strokeLinecap="round"
+          className="ringArc"
+          style={{"--circ":c,"--off":off,strokeDasharray:c}}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="text-[44px] font-extrabold leading-none tnum" style={{color:"var(--accent-bad)"}}>{score}</div>
+        <div className="mono text-[10px] tracked mt-1" style={{color:"var(--muted)"}}>RECOVERY</div>
+      </div>
+      {/* tick marks */}
+      <svg className="absolute inset-0 pointer-events-none" width={size} height={size}>
+        {[0,25,50,75].map(p=>{
+          const a = (p/100)*2*Math.PI - Math.PI/2;
+          const x1 = size/2 + Math.cos(a)*(r+stroke/2+2);
+          const y1 = size/2 + Math.sin(a)*(r+stroke/2+2);
+          const x2 = size/2 + Math.cos(a)*(r+stroke/2+6);
+          const y2 = size/2 + Math.sin(a)*(r+stroke/2+6);
+          return <line key={p} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#243553" strokeWidth="1"/>;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* -------- Sparkline tile -------- */
+function Tile({mkey}){
+  const m = METRICS[mkey];
+  const w = 240, h = 44;
+  const linePath = useMemo(()=>sparkPath(m.trend,w,h),[mkey]);
+  const areaPath = useMemo(()=>sparkArea(m.trend,w,h),[mkey]);
+  const last = m.trend[m.trend.length-1];
+  const min = Math.min(...m.trend), max = Math.max(...m.trend);
+  const lastX = w-2;
+  const lastY = 2 + (h-4) * (1 - (last-min)/((max-min)||1));
+  return (
+    <div className="relative rounded-md hairline overflow-hidden" style={{background:"var(--surface)"}}>
+      <div className="h-[3px] w-full" style={{background:m.color}}/>
+      <div className="p-3.5">
+        <div className="flex items-baseline justify-between">
+          <div className="mono text-[10px] tracked" style={{color:"var(--muted)"}}>{m.label}</div>
+          <div className="mono text-[10px]" style={{color:"var(--muted-2)"}}>{m.delta}</div>
+        </div>
+        <div className="mt-1 flex items-baseline gap-1.5">
+          <div className="text-[28px] font-bold leading-none tnum" style={{color:m.color}}>{m.value}</div>
+          <div className="mono text-[11px]" style={{color:"var(--muted)"}}>{m.unit}</div>
+        </div>
+        <div className="mt-2 spark">
+          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[44px]" preserveAspectRatio="none">
+            <path d={areaPath} fill={m.color} opacity="0.10" stroke="none"/>
+            <path d={linePath} fill="none" stroke={m.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx={lastX} cy={lastY} r="2.5" fill={m.color}/>
+            <circle cx={lastX} cy={lastY} r="5" fill={m.color} opacity="0.25"/>
+          </svg>
+        </div>
+        <div className="mt-1 flex justify-between mono text-[9px]" style={{color:"var(--muted-2)"}}>
+          <span>−7d</span><span>TODAY</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------- KPI chip -------- */
+function Chip({label,value,unit,color,sub}){
+  return (
+    <div className="flex items-center gap-3 px-4 h-11 rounded-md hairline" style={{background:"var(--surface)"}}>
+      <span className="block w-1.5 h-5 rounded-sm" style={{background:color}}/>
+      <span className="mono text-[10px] tracked" style={{color:"var(--muted)"}}>{label}</span>
+      <span className="text-[17px] font-semibold tnum" style={{color:"var(--text)"}}>{value}<span className="mono text-[11px] ml-0.5" style={{color:"var(--muted)"}}>{unit}</span></span>
+      {sub && <span className="mono text-[10px] ml-1" style={{color:"var(--muted-2)"}}>{sub}</span>}
+    </div>
+  );
+}
+
+/* -------- Manual log -------- */
+function LogPanel(){
+  const [vals,setVals] = useState({energy:4, mood:5, hunger:6});
+  const [open,setOpen] = useState(false);
+  const [saved,setSaved] = useState(null);
+  const [extra,setExtra] = useState({weight:218.4, kcal:2350, protein:185, carbs:210, fat:78});
+  const Slider = ({k,label})=>{
+    const v = vals[k];
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-baseline justify-between mb-1">
+          <span className="mono text-[10px] tracked" style={{color:"var(--muted)"}}>{label}</span>
+          <span className="mono text-[10px]" style={{color:"var(--muted-2)"}}>1–10</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>setVals(s=>({...s,[k]:Math.max(1,s[k]-1)}))} className="w-7 h-7 rounded hairline mono text-sm hover:bg-white/5" style={{background:"var(--surface-2)"}}>−</button>
+          <input type="number" value={v} onChange={e=>setVals(s=>({...s,[k]:Math.max(1,Math.min(10,+e.target.value||1))}))}
+            className="w-12 h-7 text-center rounded hairline tnum text-[15px] font-semibold bg-transparent outline-none"
+            style={{background:"var(--surface-2)"}}/>
+          <button onClick={()=>setVals(s=>({...s,[k]:Math.min(10,s[k]+1)}))} className="w-7 h-7 rounded hairline mono text-sm hover:bg-white/5" style={{background:"var(--surface-2)"}}>+</button>
+          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{background:"var(--border-soft)"}}>
+            <div className="h-full rounded-full" style={{width:`${v*10}%`,background:"var(--accent-primary)"}}/>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const save = ()=>{
+    setSaved(new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit', second:'2-digit'}));
+    setTimeout(()=>setSaved(null), 3000);
+  };
+  return (
+    <div className="rounded-md hairline p-4" style={{background:"var(--surface)"}}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-4 rounded-sm" style={{background:"var(--accent-primary)"}}/>
+          <span className="mono text-[10px] tracked" style={{color:"var(--muted)"}}>MANUAL LOG · {TODAY}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && <span className="mono text-[10px]" style={{color:"var(--accent-good)"}}>✓ SAVED {saved}</span>}
+          <button onClick={()=>setOpen(o=>!o)} className="mono text-[10px] tracked px-2 py-1 rounded hairline hover:bg-white/5" style={{color:"var(--muted)"}}>
+            {open?"− LESS":"+ MORE"}
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-5">
+        <Slider k="energy" label="ENERGY"/>
+        <Slider k="mood" label="MOOD"/>
+        <Slider k="hunger" label="HUNGER"/>
+      </div>
+      {open && (
+        <div className="mt-4 pt-4 border-t grid grid-cols-5 gap-3" style={{borderColor:"var(--border-soft)"}}>
+          {[["weight","WEIGHT","lb"],["kcal","KCAL",""],["protein","PROTEIN","g"],["carbs","CARBS","g"],["fat","FAT","g"]].map(([k,l,u])=>(
+            <div key={k}>
+              <div className="mono text-[10px] tracked mb-1" style={{color:"var(--muted)"}}>{l}</div>
+              <div className="flex items-baseline gap-1 px-2 h-8 rounded hairline" style={{background:"var(--surface-2)"}}>
+                <input type="number" value={extra[k]} onChange={e=>setExtra(s=>({...s,[k]:+e.target.value||0}))}
+                  className="w-full bg-transparent outline-none tnum text-[14px] font-medium"/>
+                <span className="mono text-[10px]" style={{color:"var(--muted-2)"}}>{u}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex items-center justify-between">
+        <span className="mono text-[10px]" style={{color:"var(--muted-2)"}}>last entry · 2026-05-17 21:48</span>
+        <button onClick={save} className="px-4 h-8 rounded text-[12px] font-semibold tracked-tight hover:brightness-110 transition"
+          style={{background:"var(--accent-primary)",color:"#0a0e14"}}>SAVE ENTRY</button>
+      </div>
+    </div>
+  );
+}
+
+/* -------- Narration -------- */
+function Narration(){
+  const text = "Your HRV dropped 1.75 SD below baseline while resting heart rate spiked 1.84 SD above normal — classic overtraining signals requiring recovery.";
+  return (
+    <div className="relative pl-4 py-2" >
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-full" style={{background:"linear-gradient(180deg,var(--accent-bad),var(--accent-strain))"}}/>
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-1.5 h-1.5 rounded-full pulse" style={{background:"var(--accent-bad)"}}/>
+        <span className="mono text-[10px] tracked" style={{color:"var(--muted)"}}>CLAUDE NARRATION · {TODAY}</span>
+      </div>
+      <p className="italic text-[14.5px] leading-[1.55]" style={{color:"#cdd6e3"}}>{text}</p>
+    </div>
+  );
+}
+
+/* -------- Chat drawer -------- */
+function ToolUseCard({onConfirm, onCancel, status}){
+  return (
+    <div className="rounded-md hairline overflow-hidden" style={{background:"var(--surface-2)"}}>
+      <div className="px-3 py-2 flex items-center gap-2 border-b" style={{borderColor:"var(--border-soft)"}}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3v10" stroke="var(--accent-warm)" strokeWidth="1.6" strokeLinecap="round"/></svg>
+        <span className="mono text-[10px] tracked" style={{color:"var(--accent-warm)"}}>TOOL · log_metric</span>
+        <span className="ml-auto mono text-[9px]" style={{color:"var(--muted-2)"}}>requires confirm</span>
+      </div>
+      <div className="px-3 py-2.5">
+        <div className="mono text-[11px] leading-[1.55]" style={{color:"var(--text)"}}>
+          <div><span style={{color:"var(--muted)"}}>metric:</span> weight</div>
+          <div><span style={{color:"var(--muted)"}}>value :</span> <span style={{color:"var(--accent-weight)"}}>218.4</span> <span style={{color:"var(--muted-2)"}}>lb</span></div>
+          <div><span style={{color:"var(--muted)"}}>date  :</span> 2026-05-18</div>
+          <div><span style={{color:"var(--muted)"}}>source:</span> chat</div>
+        </div>
+      </div>
+      {status==='pending' && (
+        <div className="px-3 py-2 flex gap-2 border-t" style={{borderColor:"var(--border-soft)"}}>
+          <button onClick={onConfirm} className="flex-1 h-7 rounded mono text-[11px] tracked-tight font-semibold hover:brightness-110"
+            style={{background:"var(--accent-good)",color:"#06160f"}}>CONFIRM</button>
+          <button onClick={onCancel} className="flex-1 h-7 rounded mono text-[11px] tracked-tight hairline hover:bg-white/5" style={{color:"var(--muted)"}}>CANCEL</button>
+        </div>
+      )}
+      {status==='confirmed' && (
+        <div className="px-3 py-1.5 border-t flex items-center gap-2" style={{borderColor:"var(--border-soft)",background:"rgba(90,212,168,0.06)"}}>
+          <span className="mono text-[10px]" style={{color:"var(--accent-good)"}}>✓ LOGGED</span>
+          <span className="mono text-[10px]" style={{color:"var(--muted-2)"}}>weight=218.4 → 2026-05-18</span>
+        </div>
+      )}
+      {status==='cancelled' && (
+        <div className="px-3 py-1.5 border-t" style={{borderColor:"var(--border-soft)"}}>
+          <span className="mono text-[10px]" style={{color:"var(--muted-2)"}}>✕ CANCELLED</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StreamingText({full, speed=14, onDone}){
+  const [n,setN] = useState(0);
+  useEffect(()=>{
+    if(n>=full.length){onDone&&onDone();return;}
+    const t = setTimeout(()=>setN(n+1), speed + Math.random()*30);
+    return ()=>clearTimeout(t);
+  },[n,full,speed]);
+  // tokenize on whitespace for nicer stagger
+  const shown = full.slice(0,n);
+  return (
+    <span>
+      {shown}
+      {n<full.length && <span className="caret" style={{background:"var(--accent-primary)"}}/>}
+    </span>
+  );
+}
+
+function ChatDrawer({collapsed, setCollapsed}){
+  const [toolStatus,setToolStatus] = useState('pending');
+  const [streamDone,setStreamDone] = useState(false);
+  const [input,setInput] = useState("");
+  const assistantText = "Looking at your last 7 days, HRV has declined for 5 straight mornings and RHR is climbing in lockstep — strong overtraining pattern. I'm recommending DELOAD: cut volume 30%, Z2 cardio only, add one full rest day. I also noticed you mentioned weighing in this morning — want me to log it?";
+  const listRef = useRef(null);
+  useEffect(()=>{ if(listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; });
+
+  if(collapsed){
+    return (
+      <aside className="h-full flex flex-col items-center justify-between py-4 hairline" style={{width:32, background:"var(--surface)"}}>
+        <button onClick={()=>setCollapsed(false)} className="w-6 h-6 rounded hover:bg-white/5 flex items-center justify-center" title="Open chat">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="var(--muted)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <div className="mono text-[10px] tracked" style={{writingMode:"vertical-rl",transform:"rotate(180deg)",color:"var(--muted)"}}>ASK CLAUDE</div>
+        <div className="w-1.5 h-1.5 rounded-full pulse" style={{background:"var(--accent-good)"}}/>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="h-full flex flex-col hairline" style={{width:360, background:"var(--surface)"}}>
+      {/* header */}
+      <div className="flex items-center justify-between px-4 h-12 border-b" style={{borderColor:"var(--border-soft)"}}>
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{background:"linear-gradient(135deg,#7eb5e0,#d44a8a)"}}>
+            <span className="text-[10px] font-bold text-[#0a0e14]">C</span>
+          </div>
+          <div>
+            <div className="text-[12px] font-semibold leading-none">Claude</div>
+            <div className="mono text-[9px] tracked mt-0.5" style={{color:"var(--accent-good)"}}>● ONLINE · CONTEXT 14d</div>
+          </div>
+        </div>
+        <button onClick={()=>setCollapsed(true)} className="w-7 h-7 rounded hover:bg-white/5 flex items-center justify-center" title="Collapse">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="var(--muted)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </div>
+
+      {/* messages */}
+      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className="text-center mono text-[9px] tracked" style={{color:"var(--muted-2)"}}>— MON · MAY 18 ·  9:42 —</div>
+
+        {/* user msg */}
+        <div className="flex justify-end">
+          <div className="max-w-[78%] px-3 py-2 rounded-lg rounded-br-sm text-[13px] leading-[1.45]" style={{background:"var(--surface-2)",color:"var(--text)"}}>
+            why is my recovery so trashed this week? weighed in at 218 this morning btw
+          </div>
+        </div>
+
+        {/* assistant msg */}
+        <div className="flex gap-2">
+          <div className="w-6 h-6 shrink-0 rounded-full mt-0.5 flex items-center justify-center" style={{background:"linear-gradient(135deg,#7eb5e0,#d44a8a)"}}>
+            <span className="text-[9px] font-bold text-[#0a0e14]">C</span>
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="text-[13px] leading-[1.55]" style={{color:"var(--text)"}}>
+              <StreamingText full={assistantText} onDone={()=>setStreamDone(true)}/>
+            </div>
+            {streamDone && (
+              <ToolUseCard
+                status={toolStatus}
+                onConfirm={()=>setToolStatus('confirmed')}
+                onCancel={()=>setToolStatus('cancelled')}
+              />
+            )}
+            {streamDone && toolStatus!=='pending' && (
+              <div className="mono text-[10px] flex items-center gap-2" style={{color:"var(--muted-2)"}}>
+                <span>⏱ 1.2s · 312 tok</span>
+                <span>·</span>
+                <span>haiku-4-5</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* suggestions */}
+      <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+        {["explain hrv drop","plan deload week","compare last 30d"].map(s=>(
+          <button key={s} className="mono text-[10px] tracked-tight px-2 py-1 rounded hairline hover:bg-white/5" style={{color:"var(--muted)"}}>
+            {s.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {/* input */}
+      <form onSubmit={e=>{e.preventDefault();setInput("");}} className="px-3 pb-3">
+        <div className="flex items-center gap-2 rounded-md hairline px-3 h-11" style={{background:"var(--surface-2)"}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your metrics…"
+            className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-[var(--muted-2)]"/>
+          <button type="button" className="w-6 h-6 rounded hover:bg-white/5 flex items-center justify-center" title="Attach">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 7l-4 4a2.5 2.5 0 11-3.5-3.5l5-5a3.5 3.5 0 015 5l-5.5 5.5" stroke="var(--muted)" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+          <button type="submit" className="w-7 h-7 rounded flex items-center justify-center" style={{background:input?"var(--accent-primary)":"#1a2236"}}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-5 14-2-6-5-2z" fill={input?"#0a0e14":"#56627a"}/></svg>
+          </button>
+        </div>
+        <div className="flex items-center justify-between mt-1.5 px-1">
+          <span className="mono text-[9px]" style={{color:"var(--muted-2)"}}>↵ send  ⇧↵ newline</span>
+          <span className="mono text-[9px]" style={{color:"var(--muted-2)"}}>tools: log_metric · query_range · plan_week</span>
+        </div>
+      </form>
+    </aside>
+  );
+}
+
+/* -------- Top bar -------- */
+function TopBar(){
+  const [time,setTime] = useState(new Date());
+  useEffect(()=>{ const i=setInterval(()=>setTime(new Date()),60000); return ()=>clearInterval(i); },[]);
+  const t = time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  return (
+    <header className="flex items-center justify-between px-6 h-14 border-b" style={{borderColor:"var(--border-soft)",background:"var(--bg-2)"}}>
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-sm relative" style={{background:"var(--accent-bad)"}}>
+            <div className="absolute inset-1 rounded-sm" style={{background:"var(--bg-2)"}}/>
+            <div className="absolute inset-[7px] rounded-sm" style={{background:"var(--accent-bad)"}}/>
+          </div>
+          <div className="leading-tight">
+            <div className="text-[13px] font-bold tracked-tight">HEALTH-METRICS</div>
+            <div className="mono text-[9px] tracked" style={{color:"var(--muted-2)"}}>v0.4 · single-user</div>
+          </div>
+        </div>
+        <nav className="flex items-center gap-1 ml-4">
+          {["Today","Trends","Sleep","Training","Nutrition","Log"].map((n,i)=>(
+            <button key={n} className={`px-3 h-8 rounded mono text-[11px] tracked-tight ${i===0?"":"hover:bg-white/5"}`}
+              style={i===0?{background:"var(--surface)",color:"var(--text)",boxShadow:"inset 0 0 0 1px var(--border-soft)"}:{color:"var(--muted)"}}>
+              {n.toUpperCase()}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 mono text-[10px] tracked" style={{color:"var(--muted)"}}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{background:"var(--accent-good)"}}/>
+          WHOOP · SYNCED 14m
+        </div>
+        <div className="flex items-center gap-2 mono text-[10px] tracked" style={{color:"var(--muted)"}}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{background:"var(--accent-good)"}}/>
+          OURA · SYNCED 22m
+        </div>
+        <div className="mono text-[10px] tracked" style={{color:"var(--muted-2)"}}>MON · MAY 18 · {t}</div>
+        <div className="w-7 h-7 rounded-full hairline flex items-center justify-center text-[11px] font-semibold" style={{background:"var(--surface)"}}>JK</div>
+      </div>
+    </header>
+  );
+}
+
+/* -------- Hero block -------- */
+function Hero(){
+  return (
+    <section className="rounded-md hairline overflow-hidden relative dotgrid" style={{background:"linear-gradient(180deg,var(--surface),var(--bg-2))"}}>
+      {/* corner ticks */}
+      <div className="absolute top-3 right-4 mono text-[10px] tracked flex items-center gap-3" style={{color:"var(--muted-2)"}}>
+        <span>BASELINE · 90d</span>
+        <span style={{color:"var(--muted)"}}>·</span>
+        <span>{TODAY}</span>
+      </div>
+      <div className="absolute top-3 left-4 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full pulse" style={{background:"var(--accent-bad)"}}/>
+        <span className="mono text-[10px] tracked" style={{color:"var(--accent-bad)"}}>CRITICAL · ACTION REQUIRED</span>
+      </div>
+      <div className="px-7 pt-12 pb-6 flex items-center gap-8">
+        <RecoveryRing score={6}/>
+        <div className="flex-1 min-w-0">
+          <div className="mono text-[11px] tracked mb-2" style={{color:"var(--muted)"}}>TODAY'S RECOMMENDATION</div>
+          <h1 className="font-black leading-[0.85] tracking-tight" style={{fontSize:96,letterSpacing:"-0.04em",color:"var(--text)"}}>
+            DELOAD
+          </h1>
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <span className="mono text-[12px] px-2.5 py-1 rounded-sm" style={{background:"rgba(226,90,74,0.12)",color:"var(--accent-bad)"}}>VOLUME −30%</span>
+            <span className="mono text-[12px] px-2.5 py-1 rounded-sm" style={{background:"rgba(126,181,224,0.10)",color:"var(--accent-primary)"}}>Z2 ONLY</span>
+            <span className="mono text-[12px] px-2.5 py-1 rounded-sm" style={{background:"rgba(90,212,168,0.10)",color:"var(--accent-good)"}}>+ 1 REST DAY</span>
+          </div>
+        </div>
+        {/* vertical stat readout */}
+        <div className="hidden xl:flex flex-col gap-2 pl-6 border-l" style={{borderColor:"var(--border-soft)"}}>
+          {[
+            ["7D AVG REC","18%","var(--accent-bad)"],
+            ["STREAK LOW","5 days","var(--accent-warm)"],
+            ["NEXT CHECK","tomorrow 06:30","var(--muted)"],
+          ].map(([l,v,c])=>(
+            <div key={l} className="flex flex-col">
+              <span className="mono text-[9px] tracked" style={{color:"var(--muted-2)"}}>{l}</span>
+              <span className="mono text-[13px] font-semibold" style={{color:c}}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------- App -------- */
+function App(){
+  const [collapsed,setCollapsed] = useState(false);
+  return (
+    <div className="h-screen w-screen flex flex-col" data-screen-label="Dashboard">
+      <TopBar/>
+      <div className="flex-1 flex min-h-0">
+        {/* main */}
+        <main className="flex-1 min-w-0 overflow-y-auto px-6 py-5 space-y-4">
+          <Hero/>
+          {/* KPI strip */}
+          <div className="flex flex-wrap gap-2">
+            <Chip label="HRV" value="15" unit="ms" color="var(--accent-primary)" sub="−1.8σ"/>
+            <Chip label="RHR" value="81" unit="bpm" color="var(--accent-warm)" sub="+1.8σ"/>
+            <Chip label="SLEEP" value="7.4" unit="h" color="var(--accent-good)" sub="84% eff"/>
+            <Chip label="STRAIN" value="5.8" unit="" color="var(--accent-strain)" sub="target ≤8"/>
+            <Chip label="SpO₂" value="96" unit="%" color="var(--accent-primary)" sub="nominal"/>
+          </div>
+          {/* sparkline grid */}
+          <div className="grid grid-cols-3 gap-3">
+            {["hrv","rhr","sleep","strain","recovery","weight"].map(k=> <Tile key={k} mkey={k}/>)}
+          </div>
+          {/* narration */}
+          <Narration/>
+          {/* log panel */}
+          <LogPanel/>
+          {/* footer hint */}
+          <div className="flex items-center justify-between pt-1 pb-3 mono text-[10px] tracked" style={{color:"var(--muted-2)"}}>
+            <span>DATA · WHOOP 4.0 + OURA G3 · LOCAL-FIRST</span>
+            <span>NEXT SYNC IN 46m</span>
+          </div>
+        </main>
+        {/* chat drawer */}
+        <ChatDrawer collapsed={collapsed} setCollapsed={setCollapsed}/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
