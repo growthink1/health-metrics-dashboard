@@ -21,9 +21,13 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   const search = req.nextUrl.search ?? "";
   const upstreamUrl = `${INTERNAL_BASE}${upstreamPath}${search}`;
 
+  // Forward the original Accept header so the backend knows whether we
+  // want JSON or text/event-stream (SSE) back.
+  const acceptHeader = req.headers.get("accept") ?? "application/json, text/event-stream";
+
   const init: RequestInit = {
     method: req.method,
-    headers: { Accept: "application/json" },
+    headers: { Accept: acceptHeader },
     cache: "no-store",
   };
 
@@ -44,12 +48,17 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     );
   }
 
-  // Stream the upstream body + content-type back to the client.
-  const upstreamBody = await resp.text();
-  return new NextResponse(upstreamBody, {
+  // Pass the upstream body through as a stream, NOT buffered via .text().
+  // Critical for SSE endpoints like /api/chat — buffering would force the
+  // browser to wait until the entire stream closes, killing the streaming UX.
+  // For non-streaming responses (JSON, etc.) this still works because we just
+  // forward the ReadableStream until it ends naturally.
+  return new NextResponse(resp.body, {
     status: resp.status,
     headers: {
       "Content-Type": resp.headers.get("content-type") ?? "application/json",
+      // Prevent any intermediate cache/proxy from buffering an SSE stream.
+      "Cache-Control": "no-cache, no-transform",
     },
   });
 }
