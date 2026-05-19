@@ -3,8 +3,11 @@ import { test, expect } from "@playwright/test";
 test.describe("dashboard smoke", () => {
   test("grid page renders TodayStrip + 6 tiles", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText(/Recommend/i)).toBeVisible();
-    await expect(page.getByText(/HRV \(today\)/i)).toBeVisible();
+    // Hero section with recommendation label
+    await expect(page.getByText("TODAY'S RECOMMENDATION")).toBeVisible();
+    // Metric chips row contains HRV
+    const metricChips = page.locator("div").filter({ hasText: "HRV" }).first();
+    await expect(metricChips).toBeVisible();
     // Six metric tiles
     const tiles = page.locator("a[href^='/metric/']");
     await expect(tiles).toHaveCount(6);
