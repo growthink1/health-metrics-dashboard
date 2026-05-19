@@ -1,13 +1,21 @@
 @import "tailwindcss";
 
 /* Console palette tokens registered with Tailwind v4 so utilities like
-   bg-surface, border-border, text-text-muted, hover:border-accent-primary
-   resolve correctly. v4 uses @theme {} instead of tailwind.config.ts. */
+   bg-surface, border-border, text-muted, hover:border-accent-primary
+   resolve correctly. v4 uses @theme {} instead of tailwind.config.ts.
+
+   v2 athletic-redesign additions (from docs/inspiration/v2-claude-design-output.html):
+   - bg-2, surface-2 (deeper layered surfaces)
+   - border-soft (subtle inner dividers, vs border for outer card frames)
+   - muted + muted-2 (replaces the old text-muted; warmer + slightly less saturated)
+   - accent-weight (purple, distinct color for the weight metric)
+   - text bumped from #d4d4d4 → #e6edf6 (cooler/brighter, reads better against the new gradient hero) */
 @theme {
+  /* Console palette (existing) */
   --color-bg: #0a0e14;
   --color-surface: #0e1422;
   --color-border: #1f3a5f;
-  --color-text: #d4d4d4;
+  --color-text: #e6edf6;
   --color-text-muted: #5a8db5;
   --color-accent-primary: #7eb5e0;
   --color-accent-warm: #e2a04a;
@@ -15,24 +23,48 @@
   --color-accent-bad: #e25a4a;
   --color-accent-strain: #d44a8a;
 
+  /* v2 athletic extensions */
+  --color-bg-2: #0c1119;
+  --color-surface-2: #121a2b;
+  --color-border-soft: #172337;
+  --color-muted: #7d8aa3;
+  --color-muted-2: #56627a;
+  --color-accent-weight: #b58fe0;
+
+  /* Recovery-score banding for the ring gradient stops (used by HeroBlock) */
+  --color-recovery-low: #ff3a5e;
+  --color-recovery-mid: #e2a04a;
+  --color-recovery-high: #5ad4a8;
+
   /* font CSS variables come from next/font in app/layout.tsx:
      Inter → --font-inter, JetBrains Mono → --font-mono */
 }
 
-/* Also expose them as plain :root vars so Recharts can read them via
-   `stroke="var(--accent-primary)"` style attribute strings in components
-   that don't use Tailwind utilities (e.g. SparklineTile, MetricChart). */
+/* Also expose every token as a plain :root var so components that need to
+   read them via inline style strings (`style={{stroke: 'var(--accent-primary)'}}`)
+   keep working — Tailwind v4's @theme generates the utilities but doesn't
+   automatically expose plain CSS variables in the cascade outside of arbitrary
+   values. Recharts components in SparklineTile / MetricChart depend on this. */
 :root {
   --bg: #0a0e14;
+  --bg-2: #0c1119;
   --surface: #0e1422;
+  --surface-2: #121a2b;
   --border: #1f3a5f;
-  --text: #d4d4d4;
+  --border-soft: #172337;
+  --text: #e6edf6;
   --text-muted: #5a8db5;
+  --muted: #7d8aa3;
+  --muted-2: #56627a;
   --accent-primary: #7eb5e0;
   --accent-warm: #e2a04a;
   --accent-good: #5ad4a8;
   --accent-bad: #e25a4a;
   --accent-strain: #d44a8a;
+  --accent-weight: #b58fe0;
+  --recovery-low: #ff3a5e;
+  --recovery-mid: #e2a04a;
+  --recovery-high: #5ad4a8;
 }
 
 html,
@@ -40,8 +72,107 @@ body {
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .font-mono {
   font-family: var(--font-mono), "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+}
+
+/* Athletic utility classes used across new components — small global
+   helpers that don't justify their own component or Tailwind plugin. */
+.tracked {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.tracked-tight {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.hairline {
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+/* Background vignette for the hero section + the page itself */
+.page-bg {
+  background:
+    radial-gradient(1200px 600px at 12% -10%, rgba(126, 181, 224, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 95% 0%, rgba(212, 74, 138, 0.05), transparent 60%),
+    var(--bg);
+}
+.dotgrid {
+  background-image: radial-gradient(circle, rgba(126, 181, 224, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Recovery ring sweep + sparkline draw animations (used by HeroBlock + SparklineTile) */
+@keyframes ringSweep {
+  from { stroke-dashoffset: var(--circ); }
+  to { stroke-dashoffset: var(--off); }
+}
+.ringArc {
+  animation: ringSweep 1.6s cubic-bezier(0.2, 0.7, 0.1, 1) forwards;
+}
+
+@keyframes sparkDraw {
+  to { stroke-dashoffset: 0; }
+}
+.spark path.sparkline {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: sparkDraw 1.4s ease-out forwards;
+}
+
+/* Chat: blinking caret for streaming + pulse for the critical indicator */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  background: currentColor;
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(226, 90, 74, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(226, 90, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(226, 90, 74, 0); }
+}
+.pulse {
+  animation: pulse 1.8s infinite;
+}
+
+/* Hide number-input spinners (LogPanel uses bare <input type="number">) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Refined scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(31, 58, 95, 0.33);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: rgba(126, 181, 224, 0.25);
 }
