@@ -89,4 +89,53 @@ describe("useChatStream", () => {
     const secondBody = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
     expect(secondBody.tool_confirmation).toEqual({ id: "toolu_read", approved: true });
   });
+
+  it("send() with attachments builds a multimodal content array", async () => {
+    const fetchSpy = vi.fn(async () =>
+      makeSseResponse([JSON.stringify({ type: "done" })]),
+    );
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useChatStream());
+    await act(async () => {
+      result.current.send("log this dinner", [
+        { type: "image", mediaType: "image/jpeg", data: "BASE64" },
+      ]);
+    });
+    await waitFor(() => expect(result.current.isStreaming).toBe(false));
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse((fetchSpy.mock.calls as any)[0][1].body as string);
+    expect(body.messages).toHaveLength(1);
+    const content = body.messages[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content[0]).toEqual({ type: "text", text: "log this dinner" });
+    expect(content[1]).toEqual({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: "BASE64" },
+    });
+  });
+
+  it("get_recent_meals is auto-confirmed (no pendingToolUse)", async () => {
+    const fetchSpy = vi.fn();
+    fetchSpy.mockResolvedValueOnce(makeSseResponse([
+      JSON.stringify({ type: "tool_use", id: "toolu_x", name: "get_recent_meals", input: { days: 7 } }),
+      JSON.stringify({ type: "done" }),
+    ]));
+    fetchSpy.mockResolvedValueOnce(makeSseResponse([
+      JSON.stringify({ type: "text", delta: "Logged meals…" }),
+      JSON.stringify({ type: "done" }),
+    ]));
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useChatStream());
+    await act(async () => {
+      result.current.send("what did I eat?");
+    });
+    await waitFor(() => expect(result.current.isStreaming).toBe(false));
+
+    expect(result.current.pendingToolUse).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 });

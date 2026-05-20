@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import type { ImageAttachment } from "./types";
 
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  attachments?: ImageAttachment[];
   toolUse?: { id: string; name: string; input: Record<string, unknown> };
   toolResult?: { id: string; approved: boolean; result?: unknown };
 }
@@ -22,14 +24,14 @@ interface UseChatStreamReturn {
   pendingToolUse: ToolUsePrompt | null;
   isStreaming: boolean;
   error: string | null;
-  send: (text: string) => void;
+  send: (text: string, attachments?: ImageAttachment[]) => void;
   confirmToolUse: (approved: boolean) => void;
   cancel: () => void;
 }
 
 // Read tools auto-execute without prompting the user. Write tools (anything
 // starting with `log_`) always require an inline Yes/No confirmation.
-const READ_TOOL_NAMES = new Set(["get_recent_metrics", "get_workouts"]);
+const READ_TOOL_NAMES = new Set(["get_recent_metrics", "get_workouts", "get_recent_meals"]);
 
 export function useChatStream(): UseChatStreamReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -141,8 +143,9 @@ export function useChatStream(): UseChatStreamReturn {
   // assigning the ref immediately below useState.
   const messagesRef = useRef<ChatMessage[]>([]);
 
-  const send = useCallback((text: string) => {
-    const newMessages: ChatMessage[] = [...messagesRef.current, { role: "user", content: text }];
+  const send = useCallback((text: string, attachments?: ImageAttachment[]) => {
+    const userMsg: ChatMessage = { role: "user", content: text, attachments };
+    const newMessages: ChatMessage[] = [...messagesRef.current, userMsg];
     messagesRef.current = newMessages;
     setMessages(newMessages);
     void runStream(
@@ -188,6 +191,18 @@ function toApi(m: ChatMessage): { role: string; content: unknown } {
       content: [
         ...(m.content ? [{ type: "text", text: m.content }] : []),
         { type: "tool_use", id: m.toolUse.id, name: m.toolUse.name, input: m.toolUse.input },
+      ],
+    };
+  }
+  if (m.attachments && m.attachments.length > 0) {
+    return {
+      role: m.role,
+      content: [
+        { type: "text", text: m.content },
+        ...m.attachments.map((a) => ({
+          type: "image",
+          source: { type: "base64", media_type: a.mediaType, data: a.data },
+        })),
       ],
     };
   }
