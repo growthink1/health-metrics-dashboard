@@ -5,6 +5,10 @@ import type {
   ManualLogPayload,
   ManualLogResponse,
   WorkoutsResponse,
+  MealsResponse,
+  WorkoutSetsResponse,
+  ManualWorkoutPayload,
+  Workout,
 } from "./types";
 
 const isServer = typeof window === "undefined";
@@ -76,4 +80,26 @@ export async function postManualLog(payload: ManualLogPayload): Promise<ManualLo
     throw new Error(`POST /api/manual-log failed: ${resp.status} ${resp.statusText}`);
   }
   return resp.json() as Promise<ManualLogResponse>;
+}
+
+export async function fetchMeals(userId = "hugo", date: string): Promise<MealsResponse> {
+  const qs = new URLSearchParams({ user_id: userId, date });
+  return _get<MealsResponse>(`/api/meals?${qs}`);
+}
+
+export async function fetchWorkoutSets(workoutId: number, userId = "hugo"): Promise<WorkoutSetsResponse> {
+  const qs = new URLSearchParams({ user_id: userId });
+  return _get<WorkoutSetsResponse>(`/api/workouts/${workoutId}/sets?${qs}`);
+}
+
+export async function postManualWorkout(payload: ManualWorkoutPayload): Promise<{ workout: Workout }> {
+  const resp = await fetch(`${API_BASE}/api/workouts/manual`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    throw new Error(`POST /api/workouts/manual failed: ${resp.status}`);
+  }
+  return resp.json();
 }

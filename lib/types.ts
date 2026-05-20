@@ -65,6 +65,7 @@ export interface ManualLogResponse {
 }
 
 export interface Workout {
+  id: number;
   date: string;
   source: string;
   source_id: string;
@@ -81,4 +82,57 @@ export interface Workout {
 export interface WorkoutsResponse {
   n_days: number;
   workouts: Workout[];
+}
+
+export interface Meal {
+  id: number;
+  date: string;
+  time: string | null;
+  meal_name: string | null;
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+  notes: string | null;
+  photo_path: string | null;
+  source: string;
+  created_at: string | null;
+}
+
+export interface MealsResponse {
+  date: string;
+  meals: Meal[];
+}
+
+export interface WorkoutSet {
+  id: number;
+  workout_id: number;
+  set_number: number;
+  exercise: string;
+  reps: number;
+  weight_lbs: number | null;
+  rpe: number | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface WorkoutSetsResponse {
+  workout_id: number;
+  sets: WorkoutSet[];
+}
+
+export interface ManualWorkoutPayload {
+  user_id?: string;
+  date: string;
+  sport_name: string;
+  duration_min: number;
+  strain?: number;
+  kcal?: number;
+  notes?: string;
+}
+
+export interface ImageAttachment {
+  type: "image";
+  mediaType: string;
+  data: string;
 }
