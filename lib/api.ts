@@ -9,6 +9,8 @@ import type {
   WorkoutSetsResponse,
   ManualWorkoutPayload,
   Workout,
+  GoalStatus,
+  GoalRecommendationView,
 } from "./types";
 
 const isServer = typeof window === "undefined";
@@ -102,4 +104,14 @@ export async function postManualWorkout(payload: ManualWorkoutPayload): Promise<
     throw new Error(`POST /api/workouts/manual failed: ${resp.status}`);
   }
   return resp.json();
+}
+
+export async function fetchGoalStatus(userId = "hugo"): Promise<GoalStatus> {
+  const qs = new URLSearchParams({ user_id: userId });
+  return _get<GoalStatus>(`/api/goals/status?${qs}`);
+}
+
+export async function fetchGoalHistory(userId = "hugo", days = 7): Promise<{ rows: GoalRecommendationView[] }> {
+  const qs = new URLSearchParams({ user_id: userId, days: String(days) });
+  return _get<{ rows: GoalRecommendationView[] }>(`/api/goals/history?${qs}`);
 }

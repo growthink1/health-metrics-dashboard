@@ -136,3 +136,54 @@ export interface ImageAttachment {
   mediaType: string;
   data: string;
 }
+
+export type GoalType = "weight" | "strength" | "habit" | "recovery_hrv";
+export type SubgoalPreset = "avg_kcal" | "workouts_per_week" | "sleep_hours_avg" | "protein_g_avg" | "meal_logs_per_week";
+export type GoalStatusValue = "active" | "achieved" | "archived" | "missed";
+
+export interface Goal {
+  id: number; name: string; goal_type: GoalType; metric: string;
+  metric_params: Record<string, unknown> | null;
+  start_value: number | null; target_value: number;
+  start_date: string; target_date: string; status: GoalStatusValue;
+}
+
+export interface Trajectory {
+  method: string;
+  current_value: number | null;
+  projected_value_mean: number | null;
+  projected_value_ci_low: number | null;
+  projected_value_ci_high: number | null;
+  p_on_pace: number | null;
+  confidence: "high" | "med" | "low";
+  data_points_used: number;
+  posterior_params?: Record<string, number>;
+  min_required?: number;
+}
+
+export interface Milestone {
+  target_value: number; target_date: string;
+  hit_at: string | null; hit_value: number | null;
+}
+
+export interface Subgoal {
+  preset: SubgoalPreset; target_value: number; window_days: number;
+  current_value: number | null; compliance_pct: number;
+}
+
+export interface GoalAction {
+  category: "nutrition" | "training" | "recovery" | "compliance" | "data";
+  change: string; rationale: string;
+}
+
+export interface GoalRecommendationView {
+  rec_date: string; narration: string; actions: GoalAction[];
+}
+
+export interface GoalStatus {
+  goal: Goal | null;
+  trajectory: Trajectory | null;
+  milestones: Milestone[];
+  subgoals: Subgoal[];
+  recommendation: GoalRecommendationView | null;
+}
