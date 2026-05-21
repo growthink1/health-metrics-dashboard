@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useChatStream } from "@/lib/chat";
 import { useVoiceInput } from "@/lib/voice";
+import { useChatDrawer } from "@/lib/chat-drawer-context";
 import { ChatMessage } from "./ChatMessage";
 import { ChatToolUsePrompt } from "./ChatToolUsePrompt";
 import type { ImageAttachment } from "@/lib/types";
 
-const STORAGE_KEY = "chat:drawer:state";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 interface PendingImage {
@@ -18,7 +18,9 @@ interface PendingImage {
 }
 
 export function ChatDrawer() {
-  const [collapsed, setCollapsed] = useState(false);
+  const drawer = useChatDrawer();
+  const collapsed = !drawer.isOpen;
+  const setCollapsed = (v: boolean) => drawer.setOpen(!v);
   const [input, setInput] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -35,15 +37,18 @@ export function ChatDrawer() {
     if (pendingImage) lastImageRef.current = pendingImage.dataUrl;
   }, [pendingImage]);
 
+  // Prefill input from context's pendingInput. Depend on the pendingInput
+  // value (not the whole drawer object) so this only fires when the pending
+  // text actually changes — the provider rebuilds the value object every
+  // render, so [drawer] would re-fire on every parent re-render.
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (saved === "collapsed") setCollapsed(true);
-  }, []);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, collapsed ? "collapsed" : "open");
+    if (drawer.pendingInput) {
+      setInput(drawer.pendingInput);
+      drawer.consumePendingInput();
+      drawer.setOpen(true);
     }
-  }, [collapsed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer.pendingInput]);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
