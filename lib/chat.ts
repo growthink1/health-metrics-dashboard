@@ -25,7 +25,7 @@ interface UseChatStreamReturn {
   isStreaming: boolean;
   error: string | null;
   send: (text: string, attachments?: ImageAttachment[]) => void;
-  confirmToolUse: (approved: boolean) => void;
+  confirmToolUse: (approved: boolean) => Promise<void>;
   cancel: () => void;
 }
 
@@ -33,7 +33,15 @@ interface UseChatStreamReturn {
 // starting with `log_`) always require an inline Yes/No confirmation.
 const READ_TOOL_NAMES = new Set(["get_recent_metrics", "get_workouts", "get_recent_meals"]);
 
-export function useChatStream(): UseChatStreamReturn {
+export interface UseChatStreamOptions {
+  /** Fired after a tool-use confirmation round-trip resolves. `approved`
+   * mirrors the user's click on the confirm card. The callback fires
+   * AFTER runStream completes so it's safe to trigger side effects like
+   * router.refresh() that depend on the backend having committed. */
+  onToolConfirm?: (toolName: string, approved: boolean) => void;
+}
+
+export function useChatStream(options: UseChatStreamOptions = {}): UseChatStreamReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingToolUse, setPendingToolUse] = useState<ToolUsePrompt | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -154,28 +162,31 @@ export function useChatStream(): UseChatStreamReturn {
     );
   }, [runStream]);
 
-  const confirmToolUse = useCallback((approved: boolean) => {
+  const confirmToolUse = useCallback(async (approved: boolean) => {
     if (!pendingToolUse) return;
     const tu = pendingToolUse;
     setPendingToolUse(null);
-    // Append the tool_use as part of the assistant turn, then trigger the
-    // backend with tool_confirmation. Backend appends the tool_result.
+    // Build the new messages list synchronously so we can pass it to runStream
+    // immediately. The setMessages updater commits the same array.
+    const continued: ChatMessage[] = [];
     setMessages((prev) => {
-      const continued: ChatMessage[] = [...prev];
-      const lastIdx = continued.length - 1;
-      if (lastIdx >= 0 && continued[lastIdx].role === "assistant") {
-        continued[lastIdx] = { ...continued[lastIdx], toolUse: tu };
+      const c: ChatMessage[] = [...prev];
+      const lastIdx = c.length - 1;
+      if (lastIdx >= 0 && c[lastIdx].role === "assistant") {
+        c[lastIdx] = { ...c[lastIdx], toolUse: tu };
       }
-      void runStream(
-        {
-          messages: continued.map(toApi),
-          tool_confirmation: { id: tu.id, approved },
-        },
-        continued,
-      );
-      return continued;
+      continued.push(...c);
+      return c;
     });
-  }, [pendingToolUse, runStream]);
+    await runStream(
+      {
+        messages: continued.map(toApi),
+        tool_confirmation: { id: tu.id, approved },
+      },
+      continued,
+    );
+    options.onToolConfirm?.(tu.name, approved);
+  }, [pendingToolUse, runStream, options]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
