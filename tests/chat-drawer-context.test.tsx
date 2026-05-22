@@ -42,4 +42,23 @@ describe("ChatDrawerProvider", () => {
     });
     expect(screen.getByTestId("pending").textContent).toBe("none");
   });
+
+  it("setHidden updates hidden value", () => {
+    function HiddenProbe() {
+      const drawer = useChatDrawer();
+      return (
+        <div>
+          <span data-testid="hidden">{String(drawer.hidden)}</span>
+          <button onClick={() => drawer.setHidden(true)}>hide</button>
+          <button onClick={() => drawer.setHidden(false)}>show</button>
+        </div>
+      );
+    }
+    render(<ChatDrawerProvider><HiddenProbe /></ChatDrawerProvider>);
+    expect(screen.getByTestId("hidden").textContent).toBe("false");
+    act(() => { fireEvent.click(screen.getByText("hide")); });
+    expect(screen.getByTestId("hidden").textContent).toBe("true");
+    act(() => { fireEvent.click(screen.getByText("show")); });
+    expect(screen.getByTestId("hidden").textContent).toBe("false");
+  });
 });
