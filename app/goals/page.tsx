@@ -1,5 +1,5 @@
 import { fetchGoalStatus, fetchMetricDetail } from "@/lib/api";
-import { EmptyGoalState } from "@/components/EmptyGoalState";
+import { GoalSetupPanel } from "@/components/GoalSetupPanel";
 import { GoalHeader } from "@/components/GoalHeader";
 import { GoalStatRow } from "@/components/GoalStatRow";
 import { GoalTrajectoryChart } from "@/components/GoalTrajectoryChart";
@@ -25,8 +25,8 @@ export default async function GoalsPage() {
   const status = await fetchGoalStatus("hugo");
   if (status.goal == null) {
     return (
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <EmptyGoalState />
+      <main className="max-w-6xl mx-auto px-6">
+        <GoalSetupPanel />
       </main>
     );
   }
